@@ -1,0 +1,353 @@
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100%;
+            height: 100%;
+            padding: 0.5rem;
+        }
+
+        .column {
+            float: left;
+            width: calc(25%);
+            height: calc(100%);
+        }
+
+        .rule {
+            width: calc(100%);
+            height: calc(50%);
+            padding: 0.5rem;
+        }
+
+        .data {
+            width: calc(100%);
+            height: calc(100% - 7rem);
+            padding: 0.5rem;
+        }
+
+        .control {
+            width: calc(100%);
+            height: calc(7rem);
+            padding: 0.5rem;
+        }
+
+        .result {
+            width: calc(100%);
+            height: calc(50%);
+            padding: 0.5rem;
+        }
+
+        .column>div>h3 {
+            width: calc(100%);
+            height: calc(2rem);
+            line-height: 2rem;
+        }
+
+        .column>div>h4 {
+            width: calc(100%);
+            height: calc(2rem);
+            line-height: 2rem;
+            text-align: right;
+        }
+
+        .column>div>input {
+            float: left;
+            width: calc(50%);
+            height: calc(6rem);
+        }
+
+        .column>div>textarea {
+            width: calc(100%);
+            height: calc(100% - 2rem);
+            border: auto 1px;
+            padding: 2px;
+        }
+    </style>
+    <div class="column">
+        <div class="rule">
+            <h3>精确规则 (匹配规则, 替换值)</h3>
+            <textarea id="hardRules"></textarea>
+        </div>
+        <div class="rule">
+            <h3>模糊规则 (匹配规则, 替换值)</h3>
+            <textarea id="fuzzRules"></textarea>
+        </div>
+    </div>
+    <div class="column">
+        <div class="data">
+            <h3>输入数据A (地区, 名称)</h3>
+            <textarea id="inputA"></textarea>
+        </div>
+        <div class="control">
+            <h4 id="bestGroup"></h4>
+            <h4 id="bestA"></h4>
+            <h4 id="bestB"></h4>
+        </div>
+    </div>
+    <div class="column">
+        <div class="data">
+            <h3>输入数据B (地区, 名称)</h3>
+            <textarea id="inputB"></textarea>
+        </div>
+        <div class="control">
+            <input id="buttonYes" type="button" value="匹配"></input>
+            <input id="buttonNo" type="button" value="不匹配"></input>
+        </div>
+    </div>
+    <div class="column">
+        <div class="result">
+            <h3>匹配成功 (A组, B组)</h3>
+            <textarea id="succeedPairs"></textarea>
+        </div>
+        <div class="result">
+            <h3>匹配失败 (A组, B组)</h3>
+            <textarea id="failedPairs"></textarea>
+        </div>
+    </div>
+
+    <script src="fuzzball.umd.min.js"></script>
+    <script>
+        'use strict';
+
+        const textareas = {
+            hardRules: null,
+            fuzzRules: null,
+            inputA: null,
+            inputB: null,
+            succeedPairs: null,
+            failedPairs: null,
+        };
+
+        const schema = {
+            hardRules: 2,
+            fuzzRules: 2,
+            inputA: 2,
+            inputB: 2,
+            succeedPairs: 3,
+            failedPairs: 3,
+        };
+
+        const controls = {
+            bestGroup: null,
+            bestA: null,
+            bestB: null,
+            buttonYes: null,
+            buttonNo: null,
+        };
+
+        for (const i in textareas) {
+            textareas[i] = document.getElementById(i);
+            textareas[i].value = localStorage.getItem(i) || textareas[i].value;
+        }
+
+        for (const i in controls) {
+            controls[i] = document.getElementById(i);
+        }
+
+        const makeClickEvent = (textarea) => {
+            return (event) => {
+                if (
+                    controls.bestGroup.innerText
+                    && controls.bestA.innerText
+                    && controls.bestB.innerText
+                ) {
+                    if (
+                        textarea.value.length
+                        && textarea.value[textarea.value.length - 1] !== '\n'
+                    ) {
+                        textarea.value += '\n';
+                    }
+
+                    textarea.value += controls.bestGroup.innerText + ','
+                        + controls.bestA.innerText + ','
+                        + controls.bestB.innerText + '\n';
+                }
+            };
+        };
+
+        controls.buttonYes.addEventListener(
+            'click',
+            makeClickEvent(textareas.succeedPairs)
+        );
+
+        controls.buttonNo.addEventListener(
+            'click',
+            makeClickEvent(textareas.failedPairs)
+        );
+
+        const processRules = (rules) => {
+            const result = [];
+
+            for (const i in rules) {
+                const from = rules[i][0];
+                const to = rules[i][1];
+
+                result.push({
+                    from: RegExp(from),
+                    to: to,
+                });
+            }
+
+            return result;
+        };
+
+        const applyRules = (text, rules) => {
+            let result = text;
+
+            for (const i in rules) {
+                result = result.replace(rules[i].from, rules[i].to);
+            }
+
+            return result;
+        };
+
+        const processInput = (input, hardRules, fuzzRules) => {
+            const result = {};
+
+            for (const i in input) {
+                const group = input[i][0];
+                const text = input[i][1];
+                const hard = applyRules(text, hardRules);
+                const fuzz = applyRules(hard, fuzzRules);
+
+                result[group] = result[group] || {};
+                result[group][text] = {
+                    hard: hard,
+                    fuzz: fuzz,
+                };
+            }
+
+            return result;
+        };
+
+        const filterInput = (pairs, inputA, inputB) => {
+            for (const i in pairs) {
+                const group = pairs[i][0];
+                const textA = pairs[i][1];
+                const textB = pairs[i][2];
+
+                delete inputA[group][textA];
+                delete inputB[group][textB];
+            }
+        };
+
+        const processPairs = (pairs) => {
+            const result = {};
+
+            for (const i in pairs) {
+                const group = pairs[i][0];
+                const textA = pairs[i][1];
+                const textB = pairs[i][2];
+
+                result[group] = result[group] || {};
+                result[group][textA] = result[group][textA] || {};
+                result[group][textA][textB] = true;
+            }
+
+            return result;
+        };
+
+        setInterval(() => {
+            // split the data
+
+            const data = {};
+
+            for (const i in textareas) {
+                const lines = textareas[i].value.split('\n');
+
+                data[i] = [];
+
+                for (const j in lines) {
+                    const items = lines[j].split(',');
+
+                    if (items.length === schema[i]) {
+                        data[i].push(items);
+                    }
+                }
+            }
+
+            // preprocess the data
+
+            const hardRules = processRules(data.hardRules);
+            const fuzzRules = processRules(data.fuzzRules);
+
+            const inputA = processInput(data.inputA, hardRules, fuzzRules);
+            const inputB = processInput(data.inputB, hardRules, fuzzRules);
+
+            filterInput(data.succeedPairs, inputA, inputB);
+
+            // const succeedPairs = processPairs(data.succeedPairs);
+            const failedPairs = processPairs(data.failedPairs);
+
+            // find the best match
+
+            const limit = data.inputA.length + data.inputB.length;
+            let count = 0;
+
+            let bestGroup = '';
+            let bestA = '';
+            let bestB = '';
+            let bestRatio = 0;
+
+            // TODO: hardRules
+
+            for (const i in inputA) {
+                for (const j in inputA[i]) {
+                    if (count == limit) {
+                        break;
+                    }
+
+                    const a = inputA[i][j];
+
+                    for (const k in inputB[i]) {
+                        if (count == limit) {
+                            break;
+                        }
+
+                        if (
+                            failedPairs[i]
+                            && failedPairs[i][j]
+                            && failedPairs[i][j][k]
+                        ) {
+                            continue;
+                        }
+
+                        count += 1;
+
+                        const b = inputB[i][k];
+                        const ratio = fuzzball.ratio(a.fuzz, b.fuzz);
+
+                        if (bestRatio < ratio) {
+                            bestGroup = i;
+                            bestA = j;
+                            bestB = k;
+                            bestRatio = ratio;
+                        }
+                    }
+                }
+            }
+
+            // show the best match
+
+            controls.bestGroup.innerText = bestGroup;
+            controls.bestA.innerText = bestA;
+            controls.bestB.innerText = bestB;
+
+            // save the textarea contents
+
+            for (const i in textareas) {
+                localStorage.setItem(i, textareas[i].value);
+            }
+        }, 200);
+    </script>
+</body>
+</html>
