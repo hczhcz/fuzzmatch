@@ -269,6 +269,10 @@
                 for (const j in lines) {
                     const items = lines[j].split(',');
 
+                    for (const k in items) {
+                        items[k] = items[k].trim();
+                    }
+
                     if (items.length === schema[i]) {
                         data[i].push(items);
                     }
