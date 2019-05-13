@@ -167,8 +167,8 @@
                         textarea.value += '\n';
                     }
 
-                    textarea.value += controls.bestGroup.innerText + ','
-                        + controls.bestA.innerText + ','
+                    textarea.value += controls.bestGroup.innerText + '\t'
+                        + controls.bestA.innerText + '\t'
                         + controls.bestB.innerText + '\n';
                 }
             };
@@ -267,7 +267,7 @@
                 data[i] = [];
 
                 for (const j in lines) {
-                    const items = lines[j].split(',');
+                    const items = lines[j].split('\t');
 
                     for (const k in items) {
                         items[k] = items[k].trim();
